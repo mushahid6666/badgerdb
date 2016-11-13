@@ -42,13 +42,12 @@ BufMgr::~BufMgr() {
     for (FrameId i = 0; i < this->numBufs; i++) {
         if (this->bufDescTable[i].valid && this->bufDescTable[i].dirty) {
             File* file = this->bufDescTable[i].file;
-            PageId pageNo = this->bufDescTable[i].pageNo;
-            file->writePage(this->bufPool[pageNo]);
+            file->writePage(this->bufPool[i]);
         }
     }
-    delete[](this->bufDescTable);
-    delete[](this->hashTable);
-    delete[](this->bufPool);
+    delete[] (this->bufDescTable);
+    delete (this->hashTable);
+    delete[] (this->bufPool);
 }
 
 void BufMgr::advanceClock()
@@ -57,45 +56,57 @@ void BufMgr::advanceClock()
 }
 
 void BufMgr::runClockAlgorithm(FrameId& foundFrame) {
-    FrameId origClockHand = this->clockHand;
+    unsigned int totalPinnedPages = 0;
+    unsigned int counter = 0;
     advanceClock();
     FrameId currClockHand = this->clockHand;
     //Clock replacement
-    while(currClockHand!=origClockHand) {
+    start_again:
+
+    while( counter != this->numBufs) {
         if (this->bufDescTable[currClockHand].valid == true) {
             if (this->bufDescTable[currClockHand].refbit == true) {
                 this->bufDescTable[currClockHand].refbit = false;
                 advanceClock();
+                currClockHand = this->clockHand;
+                counter +=1;
                 continue;
             }
             else if (this->bufDescTable[currClockHand].pinCnt != 0) {
+                totalPinnedPages += 1;
                 advanceClock();
+                currClockHand = this->clockHand;
+                counter +=1;
                 continue;
             }
             else if (this->bufDescTable[currClockHand].dirty == true) {
                 File *file = this->bufDescTable[currClockHand].file;
-                PageId pageNo = this->bufDescTable[currClockHand].pageNo;
-                file->writePage(this->bufPool[pageNo]);
+                file->writePage(this->bufPool[currClockHand]);
             }
+            File *file = this->bufDescTable[currClockHand].file;
+            PageId pageNo = this->bufDescTable[currClockHand].pageNo;
+            this->bufDescTable[currClockHand].Clear();
+            this->hashTable->remove(file, pageNo);
         }
         foundFrame = this->clockHand;
         break;
     }
-    if (currClockHand == origClockHand) {
-        foundFrame = origClockHand;
+    if (counter == this->numBufs) {
+        if(totalPinnedPages == numBufs) {
+            throw(BufferExceededException());
+        }
+        else{
+            totalPinnedPages = 0;
+            counter =0;
+            goto start_again;
+        }
     }
-    return;
 }
 
 void BufMgr::allocBuf(FrameId& foundFrame)
 {
-    FrameId origClockHandle = this->clockHand;
-
     this->runClockAlgorithm(foundFrame);//updates foundFrame
 
-    if (origClockHandle == foundFrame) {
-        throw(BufferExceededException());
-    }
     //runClockAlgorithm() flushes frame, if dirty
     return;
 }
@@ -119,16 +130,19 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
             page = bufPool+frameNo;
         }
         catch (BufferExceededException) {
+            std::cout<<"BufferExceededException"<<std::endl;
             //TODO: What to do here?
             page=NULL;
             return;
         }
         catch (HashAlreadyPresentException) {
             //TODO: what to do here?
+            std::cout<<"HashAlreadyPresentException"<<std::endl;
             page = NULL;
             return;
         }
         catch (HashTableException) {
+            std::cout<<"HashTableException"<<std::endl;
             //TODO: what to do here?
             page = NULL;
             return;
@@ -154,7 +168,9 @@ void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty)
     }
     else {
         this->bufDescTable[frameNo].pinCnt --;
-        this->bufDescTable[frameNo].dirty = dirty;
+        if (dirty==true) {
+            this->bufDescTable[frameNo].dirty = true;
+        }
     }
 }
 
@@ -171,28 +187,23 @@ void BufMgr::flushFile(const File* file)
                 throw PagePinnedException(foundFile->filename(), pageNo, i);
             }
             else if (this->bufDescTable[i].dirty) {
-                foundFile->writePage(this->bufPool[pageNo]);
+                foundFile->writePage(this->bufPool[i]);
                 this->bufDescTable[i].Clear();
+                this->hashTable->remove(file, pageNo);
             }
         }
     }
-
 }
 
 void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page) 
 {
     FrameId frameNo;
-    try {
-        this->allocBuf(frameNo);
-    }
-    catch (BufferExceededException) {
-        return;//TODO: check what to do here
-    }
+    this->allocBuf(frameNo);
     this->bufPool[frameNo] = file->allocatePage();
     pageNo = this->bufPool[frameNo].page_number();
     this->hashTable->insert(file, pageNo, frameNo);
     this->bufDescTable[frameNo].Set(file, pageNo);
-    page = bufPool+frameNo;
+    page = this->bufPool+frameNo;
 }
 
 void BufMgr::disposePage(File* file, const PageId PageNo)
