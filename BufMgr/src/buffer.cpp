@@ -35,6 +35,7 @@ BufMgr::BufMgr(std::uint32_t bufs)
   hashTable = new BufHashTbl (htsize);  // allocate the buffer hash table
 
   clockHand = bufs - 1;
+  bufStats.clear();
 }
 
 
@@ -43,6 +44,7 @@ BufMgr::~BufMgr() {
         if (this->bufDescTable[i].valid && this->bufDescTable[i].dirty) {
             File* file = this->bufDescTable[i].file;
             file->writePage(this->bufPool[i]);
+            this->bufStats.diskwrites++;
         }
     }
     delete[] (this->bufDescTable);
@@ -82,6 +84,7 @@ void BufMgr::runClockAlgorithm(FrameId& foundFrame) {
             else if (this->bufDescTable[currClockHand].dirty == true) {
                 File *file = this->bufDescTable[currClockHand].file;
                 file->writePage(this->bufPool[currClockHand]);
+                this->bufStats.diskwrites++;
             }
             File *file = this->bufDescTable[currClockHand].file;
             PageId pageNo = this->bufDescTable[currClockHand].pageNo;
@@ -114,6 +117,7 @@ void BufMgr::allocBuf(FrameId& foundFrame)
 	
 void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 {
+    this->bufStats.accesses++;
     FrameId frameNo;
     try {
         this->hashTable->lookup(file, pageNo, frameNo);
@@ -125,6 +129,7 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
         try {
             this->allocBuf(frameNo);
             this->bufPool[frameNo] = file->readPage(pageNo);
+            this->bufStats.diskreads++;
             this->hashTable->insert(file, pageNo, frameNo);
             this->bufDescTable[frameNo].Set(file, pageNo);
             page = bufPool+frameNo;
@@ -134,7 +139,7 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
             //TODO: What to do here?
             page=NULL;
             return;
-        }
+        }/*
         catch (HashAlreadyPresentException) {
             //TODO: what to do here?
             std::cout<<"HashAlreadyPresentException"<<std::endl;
@@ -146,7 +151,7 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
             //TODO: what to do here?
             page = NULL;
             return;
-        }
+        }*/
         return;
     }
 
@@ -155,6 +160,7 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 
 void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty) 
 {
+    this->bufStats.accesses++;
     FrameId frameNo;
     try {
         this->hashTable->lookup(file, pageNo, frameNo);
@@ -176,9 +182,10 @@ void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty)
 
 void BufMgr::flushFile(const File* file) 
 {
+    this->bufStats.accesses++; //TODO: check how much to increment
     for (FrameId i = 0; i < this->numBufs; i++) {
         File* foundFile = this->bufDescTable[i].file;
-        if (foundFile == file) { //TODO:how to compare files
+        if (foundFile == file) {
             PageId pageNo = this->bufDescTable[i].pageNo;
             if (this->bufDescTable[i].valid == false) {
                 throw BadBufferException(i,this->bufDescTable[i].dirty, this->bufDescTable[i].valid, this->bufDescTable[i].refbit);
@@ -188,6 +195,7 @@ void BufMgr::flushFile(const File* file)
             }
             else if (this->bufDescTable[i].dirty) {
                 foundFile->writePage(this->bufPool[i]);
+                this->bufStats.diskwrites++;
                 this->bufDescTable[i].Clear();
                 this->hashTable->remove(file, pageNo);
             }
@@ -197,6 +205,7 @@ void BufMgr::flushFile(const File* file)
 
 void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page) 
 {
+    this->bufStats.accesses++;
     FrameId frameNo;
     this->allocBuf(frameNo);
     this->bufPool[frameNo] = file->allocatePage();
@@ -208,6 +217,7 @@ void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page)
 
 void BufMgr::disposePage(File* file, const PageId PageNo)
 {
+    this->bufStats.accesses++;
     FrameId frameNo;
     try {
         this->hashTable->lookup(file, PageNo, frameNo);
@@ -239,5 +249,7 @@ void BufMgr::printSelf(void)
 
 	std::cout << "Total Number of Valid Frames:" << validFrames << "\n";
 }
+
+
 
 }

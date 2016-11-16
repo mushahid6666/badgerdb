@@ -24,11 +24,12 @@ using namespace badgerdb;
 
 const PageId num = 100;
 PageId pid[num], pageno1, pageno2, pageno3, i;
+PageId pid6[num];
 RecordId rid[num], rid2, rid3;
 Page *page, *page2, *page3;
 char tmpbuf[100];
 BufMgr* bufMgr;
-File *file1ptr, *file2ptr, *file3ptr, *file4ptr, *file5ptr;
+File *file1ptr, *file2ptr, *file3ptr, *file4ptr, *file5ptr,*file6ptr;
 
 void test1();
 void test2();
@@ -36,6 +37,10 @@ void test3();
 void test4();
 void test5();
 void test6();
+void test7();
+void test8();
+void test9();
+void test10();
 void testBufMgr();
 
 int main() 
@@ -112,6 +117,7 @@ void testBufMgr()
   const std::string& filename3 = "test.3";
   const std::string& filename4 = "test.4";
   const std::string& filename5 = "test.5";
+  const std::string& filename6 = "test.6";
 
   try
 	{
@@ -120,6 +126,7 @@ void testBufMgr()
     File::remove(filename3);
     File::remove(filename4);
     File::remove(filename5);
+	File::remove(filename6);
   }
 	catch(FileNotFoundException e)
 	{
@@ -130,13 +137,14 @@ void testBufMgr()
 	File file3 = File::create(filename3);
 	File file4 = File::create(filename4);
 	File file5 = File::create(filename5);
+	File file6 = File::create(filename6);
 
 	file1ptr = &file1;
 	file2ptr = &file2;
 	file3ptr = &file3;
 	file4ptr = &file4;
 	file5ptr = &file5;
-
+	file6ptr = &file6;
 	//Test buffer manager
 	//Comment tests which you do not wish to run now. Tests are dependent on their preceding tests. So, they have to be run in the following order. 
 	//Commenting  a particular test requires commenting all tests that follow it else those tests would fail.
@@ -146,6 +154,11 @@ void testBufMgr()
 	test4();
 	test5();
 	test6();
+	test7();
+	test8();
+	test9();
+
+	delete bufMgr;
 
 	//Close files before deleting them
 	file1.~File();
@@ -153,6 +166,7 @@ void testBufMgr()
 	file3.~File();
 	file4.~File();
 	file5.~File();
+	file6.~File();
 
 	//Delete files
 	File::remove(filename1);
@@ -160,8 +174,8 @@ void testBufMgr()
 	File::remove(filename3);
 	File::remove(filename4);
 	File::remove(filename5);
+	File::remove(filename6);
 
-	delete bufMgr;
 
 	std::cout << "\n" << "Passed all tests." << "\n";
 }
@@ -188,7 +202,11 @@ void test1()
 		}
 		bufMgr->unPinPage(file1ptr, pid[i], false);
 	}
+
 	std::cout<< "Test 1 passed" << "\n";
+	std::cout << "Test 1 Buffer stats:" << "\n";
+	BufStats st = bufMgr->getBufStats();
+	std::cout << st.accesses <<" " <<  st.diskreads <<" "<<st.diskwrites <<" "<<std::endl;
 }
 
 void test2()
@@ -203,7 +221,7 @@ void test2()
 		rid2 = page2->insertRecord(tmpbuf);
 
 		int index = random() % num;
-    pageno1 = pid[index];
+    	pageno1 = pid[index];
 		bufMgr->readPage(file1ptr, pageno1, page);
 		sprintf((char*)tmpbuf, "test.1 Page %d %7.1f", pageno1, (float)pageno1);
 		if(strncmp(page->getRecord(rid[index]).c_str(), tmpbuf, strlen(tmpbuf)) != 0)
@@ -240,6 +258,9 @@ void test2()
 	}
 
 	std::cout << "Test 2 passed" << "\n";
+	std::cout << "Test 2 Buffer stats:" << "\n";
+	BufStats st = bufMgr->getBufStats();
+	std::cout << st.accesses <<" " <<  st.diskreads <<" "<<st.diskwrites <<" "<<std::endl;
 }
 
 void test3()
@@ -254,6 +275,10 @@ void test3()
 	}
 
 	std::cout << "Test 3 passed" << "\n";
+	std::cout << "Test 3 Buffer stats:" << "\n";
+	BufStats st = bufMgr->getBufStats();
+	std::cout << st.accesses <<" " <<  st.diskreads <<" "<<st.diskwrites <<" "<<std::endl;
+
 }
 
 void test4()
@@ -270,6 +295,9 @@ void test4()
 	}
 
 	std::cout << "Test 4 passed" << "\n";
+	std::cout << "Test 4 Buffer stats:" << "\n";
+	BufStats st = bufMgr->getBufStats();
+	std::cout << st.accesses <<" " <<  st.diskreads <<" "<<st.diskwrites <<" "<<std::endl;
 }
 
 void test5()
@@ -294,6 +322,10 @@ void test5()
 
 	for (i = 1; i <= num; i++)
 		bufMgr->unPinPage(file5ptr, i, true);
+
+	std::cout << "Test 5 Buffer stats:" << "\n";
+	BufStats st = bufMgr->getBufStats();
+	std::cout << st.accesses <<" " <<  st.diskreads <<" "<<st.diskwrites <<" "<<std::endl;
 }
 
 void test6()
@@ -318,4 +350,92 @@ void test6()
 		bufMgr->unPinPage(file1ptr, i, true);
 
 	bufMgr->flushFile(file1ptr);
+
+	std::cout << "Test 6 Buffer stats:" << "\n";
+	BufStats st = bufMgr->getBufStats();
+	std::cout << st.accesses <<" " <<  st.diskreads <<" "<<st.diskwrites <<" "<<std::endl;
+}
+
+void test7()
+{
+	//Testing dispose page
+
+	bufMgr->readPage(file1ptr, pid[0], page);
+	sprintf((char*)tmpbuf, "test.1 Page %d %7.1f", pid[0], (float)pid[0]);
+	rid[i] = page->insertRecord(tmpbuf);
+
+	bufMgr->disposePage(file1ptr,pid[0]);
+
+	try{
+		bufMgr->readPage(file1ptr, pid[0], page);
+	}
+	catch(InvalidPageException){
+		std::cout << "Invalid Page Exception thrown from file" << "\n";
+	}
+
+	//Now allocate page
+	bufMgr->allocPage(file1ptr, pid[0], page);
+	sprintf((char*)tmpbuf, "test.1 Page %d %7.1f", pid[0], (float)pid[0]);
+	rid[i] = page->insertRecord(tmpbuf);
+
+	bufMgr->unPinPage(file1ptr, pid[0], true);
+
+	std::cout << "Test 7 passed" << "\n";
+
+	std::cout << "Test 7 Buffer stats:" << "\n";
+	BufStats st = bufMgr->getBufStats();
+	std::cout << st.accesses <<" " <<  st.diskreads <<" "<<st.diskwrites <<" "<<std::endl;
+}
+
+void test8()
+{
+	//exactly one page unpinned, should not fail
+	for (i = 0; i < num; i++) {
+		bufMgr->readPage(file1ptr, pid[i], page);
+	}
+
+	for (i = 0; i <= 0; i++)
+		bufMgr->unPinPage(file1ptr, pid[i], false);
+
+	PageId tmp;
+	try
+	{
+		bufMgr->allocPage(file5ptr, tmp, page);
+
+	}
+	catch(BufferExceededException){
+		std::cout << "Test 8 Failed" << "\n";
+		return;
+	}
+
+	bufMgr->unPinPage(file5ptr,tmp, true);
+	std::cout << "Test 8 Buffer stats:" << "\n";
+	BufStats st = bufMgr->getBufStats();
+	std::cout << st.accesses <<" " <<  st.diskreads <<" "<<st.diskwrites <<" "<<std::endl;
+}
+
+void test9() {
+	for (i = 1; i < num; i++) {
+		bufMgr->unPinPage(file1ptr, pid[i], false);
+	}
+	//Pin all frames
+	bufMgr->printSelf();
+
+	for (i = 0; i < num; i++) {
+		bufMgr->readPage(file1ptr, pid[i], page);
+	}
+
+	bufMgr->printSelf();
+	//Unpin alternate
+	for (i = 0; i < num; i+=2)
+		bufMgr->unPinPage(file1ptr, pid[i], false);
+
+	bufMgr->printSelf();
+	for (i = 0; i < num/2; i++)
+		bufMgr->allocPage(file6ptr, pid6[i], page);
+
+	bufMgr->printSelf();
+
+}
+
 }
