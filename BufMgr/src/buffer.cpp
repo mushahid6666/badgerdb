@@ -1,6 +1,10 @@
 /**
  * @author See Contributors.txt for code contributors and overview of BadgerDB.
- *
+ * Mohit 9073337603 (mohit)
+ * Mushahid Alam
+ * Ali Hussain Hitawala
+ * Purpose of the file: File to implement the methods exposed by BufMgr class
+ *                      This file implements the actual buffer manager functionality.
  * @section LICENSE
  * Copyright (c) 2012 Database Group, Computer Sciences Department, University of Wisconsin-Madison.
  */
@@ -19,6 +23,9 @@
 
 namespace badgerdb {
 
+	/**
+	* This is the class constructor. Allocates an array for the buffer pool with bufs page frames an 	* d a corresponding BufDesc table. The way things are set up all frames will be in the clear sta	* te when the buffer pool is allocated. The hash table will also start out in an empty state. We 	* have provided the constructor.
+	*/
 BufMgr::BufMgr(std::uint32_t bufs)
 	: numBufs(bufs) {
 	bufDescTable = new BufDesc[bufs];
@@ -38,7 +45,10 @@ BufMgr::BufMgr(std::uint32_t bufs)
   bufStats.clear();
 }
 
-
+	/**
+   * Destructor of BufMgr class
+   * Flushes out all dirty pages and deallocates the buffer pool and the BufDesc table and Hashtable.
+	 */	
 BufMgr::~BufMgr() {
     for (FrameId i = 0; i < this->numBufs; i++) {
         if (this->bufDescTable[i].valid && this->bufDescTable[i].dirty) {
@@ -52,12 +62,21 @@ BufMgr::~BufMgr() {
     delete[] (this->bufPool);
 }
 
+	/**
+   * Advance clock to next frame in the buffer pool
+	 */
 void BufMgr::advanceClock()
 {
     this->clockHand = (this->clockHand+1)%(this->numBufs);
 }
 
-void BufMgr::runClockAlgorithm(FrameId& foundFrame) {
+	/**
+	 * Allocates a free frame using the clock algorithm; if necessary, writing a dirty page back to 	 * disk. Throws BufferExceededException if all buffer frames are pinned. This private method wil	 * l get called by the read-Page() and allocPage() methods described below. Make sure that if th	 * e buffer frame allocated has a valid page in it, you remove the appropriate entry from the ha	 * sh table. 
+	 * @param frame   	Frame reference, frame ID of allocated frame returned via this variable
+	 * @throws BufferExceededException If no such buffer is found which can be allocated
+	 */
+void BufMgr::allocBuf(FrameId& foundFrame)
+{
     unsigned int totalPinnedPages = 0;
     unsigned int counter = 0;
     advanceClock();
@@ -104,17 +123,19 @@ void BufMgr::runClockAlgorithm(FrameId& foundFrame) {
             goto start_again;
         }
     }
-}
 
-void BufMgr::allocBuf(FrameId& foundFrame)
-{
-    this->runClockAlgorithm(foundFrame);//updates foundFrame
-
-    //runClockAlgorithm() flushes frame, if dirty
     return;
 }
 
-	
+	/**
+	 * Reads the given page from the file into a frame and returns the pointer to page.
+	 * If the requested page is already present in the buffer pool pointer to that frame is returned
+	 * otherwise a new frame is allocated from the buffer pool for reading the page.
+	 *
+	 * @param file   	File object
+	 * @param PageNo  Page number in the file to be read
+	 * @param page  	Reference to page pointer. Used to fetch the Page object in which reques	 * ted page from file is read in.
+	 */	
 void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 {
     this->bufStats.accesses++;
@@ -136,28 +157,22 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
         }
         catch (BufferExceededException) {
             std::cout<<"BufferExceededException"<<std::endl;
-            //TODO: What to do here?
             page=NULL;
             return;
-        }/*
-        catch (HashAlreadyPresentException) {
-            //TODO: what to do here?
-            std::cout<<"HashAlreadyPresentException"<<std::endl;
-            page = NULL;
-            return;
         }
-        catch (HashTableException) {
-            std::cout<<"HashTableException"<<std::endl;
-            //TODO: what to do here?
-            page = NULL;
-            return;
-        }*/
         return;
     }
 
 }
 
-
+	/**
+	 * Unpin a page from memory since it is no longer required for it to remain in memory.
+	 *
+	 * @param file   	File object
+	 * @param PageNo  Page number
+	 * @param dirty		True if the page to be unpinned needs to be marked dirty
+   * @throws  PageNotPinnedException If the page is not already pinned
+	 */
 void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty) 
 {
     this->bufStats.accesses++;
@@ -180,6 +195,15 @@ void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty)
     }
 }
 
+	/**
+	 * Writes out all dirty pages of the file to disk.
+	 * All the frames assigned to the file need to be unpinned from buffer pool before this function can be successfully called.
+	 * Otherwise Error returned.
+	 *
+	 * @param file   	File object
+   * @throws  PagePinnedException If any page of the file is pinned in the buffer pool
+   * @throws BadBufferException If any frame allocated to the file is found to be invalid
+	 */
 void BufMgr::flushFile(const File* file) 
 {
     this->bufStats.accesses++; //TODO: check how much to increment
@@ -203,6 +227,14 @@ void BufMgr::flushFile(const File* file)
     }
 }
 
+	/**
+	 * Allocates a new, empty page in the file and returns the Page object.
+	 * The newly allocated page is also assigned a frame in the buffer pool.
+	 *
+	 * @param file   	File object
+	 * @param PageNo  Page number. The number assigned to the page in the file is returned via this reference.
+	 * @param page  	Reference to page pointer. The newly allocated in-memory Page object is returned via this reference.
+	 */
 void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page) 
 {
     this->bufStats.accesses++;
@@ -215,6 +247,13 @@ void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page)
     page = this->bufPool+frameNo;
 }
 
+	/**
+	 * Delete page from file and also from buffer pool if present.
+	 * Since the page is entirely deleted from file, its unnecessary to see if the page is dirty.
+	 *
+	 * @param file   	File object
+	 * @param PageNo  Page number
+	 */
 void BufMgr::disposePage(File* file, const PageId PageNo)
 {
     this->bufStats.accesses++;
@@ -232,6 +271,9 @@ void BufMgr::disposePage(File* file, const PageId PageNo)
     return;
 }
 
+	/**
+   * Print member variable values.
+	 */
 void BufMgr::printSelf(void) 
 {
   BufDesc* tmpbuf;

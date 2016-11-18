@@ -199,8 +199,6 @@ class BufMgr
   void allocBuf(FrameId &foundFrame);
 
 
-  void runClockAlgorithm(FrameId& frame);
-
  public:
 	/**
    * Actual buffer pool from which frames are allocated
